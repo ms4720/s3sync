@@ -68,7 +68,8 @@ module S3sync
                                    [ '--cache-control',  GetoptLong::REQUIRED_ARGUMENT ],
                                    [ '--exclude',        GetoptLong::REQUIRED_ARGUMENT ],
                                    [ '--make-dirs',	GetoptLong::NO_ARGUMENT ],
-                                   [ '--no-md5',	GetoptLong::NO_ARGUMENT ]           
+                                   [ '--no-md5',	GetoptLong::NO_ARGUMENT ],           
+                                   [ '--no-meta',	GetoptLong::NO_ARGUMENT ]           
                                    )
 			  
     def S3sync.usage(message = nil)
@@ -80,7 +81,7 @@ module S3sync
   --ssl     -s          --recursive   -r     --delete
   --public-read -p      --expires="<exp>"    --cache-control="<cc>"
   --exclude="<regexp>"  --progress           --debug   -d
-  --make-dirs           --no-md5
+  --make-dirs           --no-md5             --no-meta
 One of <source> or <destination> must be of S3 format, the other a local path.
 Reminders:
 * An S3 formatted item with bucket 'mybucket' and prefix 'mypre' looks like:
@@ -489,11 +490,17 @@ ENDUSAGE
       g ? g.to_i : 600 # default to owner only
     end
     def updateFrom(fromNode)
+      # Don't upload directory meta files to S3. Requires use of --make-dirs when downloading.
+      if $S3syncOptions['--no-meta'] and fromNode.directory?
+        return
+      end
       if fromNode.respond_to?(:stream)
         meta = Hash.new
-        meta['owner'] = fromNode.owner.to_s
-        meta['group'] = fromNode.group.to_s
-        meta['permissions'] = fromNode.permissions.to_s
+        if not $S3syncOptions['--no-meta']
+            meta['owner'] = fromNode.owner.to_s
+            meta['group'] = fromNode.group.to_s
+            meta['permissions'] = fromNode.permissions.to_s
+        end
         meta['symlink'] = 'true' if fromNode.symlink?
         begin
           theStream = fromNode.stream
