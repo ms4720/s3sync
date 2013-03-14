@@ -373,8 +373,11 @@ ENDUSAGE
           else
             LocalNode.new(localPrefix, sourceNode.name)
           end
-        puts "Create node #{sourceNode.name}" if $S3syncOptions['--verbose']
-        dNode.updateFrom(sourceNode) unless $S3syncOptions['--dryrun']
+        # Don't upload directory meta files to S3. Requires use of --make-dirs when downloading.
+        if dNode.kind_of? LocalNode or not $S3syncOptions['--no-meta'] or not sourceNode.directory?
+            puts "Create node #{sourceNode.name}" if $S3syncOptions['--verbose']
+            dNode.updateFrom(sourceNode) unless $S3syncOptions['--dryrun']
+        end
         sourceNode = sourceTree.next? ? sourceTree.next : nil
       elsif (!sourceNode) or (destinationNode and (sourceNode.name > destinationNode.name))
         $stderr.puts "Source does not have #{destinationNode.name}" if $S3syncOptions['--debug']
@@ -490,10 +493,6 @@ ENDUSAGE
       g ? g.to_i : 600 # default to owner only
     end
     def updateFrom(fromNode)
-      # Don't upload directory meta files to S3. Requires use of --make-dirs when downloading.
-      if $S3syncOptions['--no-meta'] and fromNode.directory?
-        return
-      end
       if fromNode.respond_to?(:stream)
         meta = Hash.new
         if not $S3syncOptions['--no-meta']
