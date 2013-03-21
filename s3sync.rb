@@ -480,13 +480,15 @@ ENDUSAGE
         @result = S3sync.S3try(:head, @bucket, @path)
       end
       debug("Owner of this s3 node is #{@result.object.metadata['owner']}")
-      @result.object.metadata['owner'].to_i # if not there, will be nil => 0 which == root so good default
+      g = @result.object.metadata['owner']
+      g ? g.to_i : Process.euid # if not there, set to effective user id of this process
     end
     def group
       unless @result
         @result = S3sync.S3try(:head, @bucket, @path)
       end
-      @result.object.metadata['group'].to_i # 0 default ok
+      g = @result.object.metadata['group']
+      g ? g.to_i : Process.egid # if not there, set to effective group id of this process
     end
     def permissions
       g = @result.object.metadata['permissions']
