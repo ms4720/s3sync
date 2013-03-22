@@ -68,7 +68,8 @@ module S3sync
                                    [ '--cache-control',  GetoptLong::REQUIRED_ARGUMENT ],
                                    [ '--exclude',        GetoptLong::REQUIRED_ARGUMENT ],
                                    [ '--make-dirs',	GetoptLong::NO_ARGUMENT ],
-                                   [ '--no-md5',	GetoptLong::NO_ARGUMENT ]           
+                                   [ '--no-md5',	GetoptLong::NO_ARGUMENT ],           
+                                   [ '--no-meta',	GetoptLong::NO_ARGUMENT ]           
                                    )
 			  
     def S3sync.usage(message = nil)
@@ -80,7 +81,7 @@ module S3sync
   --ssl     -s          --recursive   -r     --delete
   --public-read -p      --expires="<exp>"    --cache-control="<cc>"
   --exclude="<regexp>"  --progress           --debug   -d
-  --make-dirs           --no-md5
+  --make-dirs           --no-md5             --no-meta
 One of <source> or <destination> must be of S3 format, the other a local path.
 Reminders:
 * An S3 formatted item with bucket 'mybucket' and prefix 'mypre' looks like:
@@ -372,8 +373,11 @@ ENDUSAGE
           else
             LocalNode.new(localPrefix, sourceNode.name)
           end
-        puts "Create node #{sourceNode.name}" if $S3syncOptions['--verbose']
-        dNode.updateFrom(sourceNode) unless $S3syncOptions['--dryrun']
+        # Don't upload directory meta files to S3. Requires use of --make-dirs when downloading.
+        if dNode.kind_of? LocalNode or not $S3syncOptions['--no-meta'] or not sourceNode.directory?
+            puts "Create node #{sourceNode.name}" if $S3syncOptions['--verbose']
+            dNode.updateFrom(sourceNode) unless $S3syncOptions['--dryrun']
+        end
         sourceNode = sourceTree.next? ? sourceTree.next : nil
       elsif (!sourceNode) or (destinationNode and (sourceNode.name > destinationNode.name))
         $stderr.puts "Source does not have #{destinationNode.name}" if $S3syncOptions['--debug']
@@ -476,24 +480,28 @@ ENDUSAGE
         @result = S3sync.S3try(:head, @bucket, @path)
       end
       debug("Owner of this s3 node is #{@result.object.metadata['owner']}")
-      @result.object.metadata['owner'].to_i # if not there, will be nil => 0 which == root so good default
+      g = @result.object.metadata['owner']
+      g ? g.to_i : Process.euid # if not there, set to effective user id of this process
     end
     def group
       unless @result
         @result = S3sync.S3try(:head, @bucket, @path)
       end
-      @result.object.metadata['group'].to_i # 0 default ok
+      g = @result.object.metadata['group']
+      g ? g.to_i : Process.egid # if not there, set to effective group id of this process
     end
     def permissions
       g = @result.object.metadata['permissions']
-      g ? g.to_i : 600 # default to owner only
+      g ? g.to_i : 0600 # default to owner only
     end
     def updateFrom(fromNode)
       if fromNode.respond_to?(:stream)
         meta = Hash.new
-        meta['owner'] = fromNode.owner.to_s
-        meta['group'] = fromNode.group.to_s
-        meta['permissions'] = fromNode.permissions.to_s
+        if not $S3syncOptions['--no-meta']
+            meta['owner'] = fromNode.owner.to_s
+            meta['group'] = fromNode.group.to_s
+            meta['permissions'] = fromNode.permissions.to_s
+        end
         meta['symlink'] = 'true' if fromNode.symlink?
         begin
           theStream = fromNode.stream
@@ -613,7 +621,7 @@ ENDUSAGE
       self.exist? ? self.stat().gid : 0
     end
     def permissions
-      self.exist? ? self.stat().mode : 600
+      self.exist? ? self.stat().mode : 0600
     end
     def updateFrom(fromNode)
       if fromNode.respond_to?(:to_stream)
