@@ -492,7 +492,7 @@ ENDUSAGE
     end
     def permissions
       g = @result.object.metadata['permissions']
-      g ? g.to_i : 600 # default to owner only
+      g ? g.to_i : 0600 # default to owner only
     end
     def updateFrom(fromNode)
       if fromNode.respond_to?(:stream)
@@ -621,7 +621,7 @@ ENDUSAGE
       self.exist? ? self.stat().gid : 0
     end
     def permissions
-      self.exist? ? self.stat().mode : 600
+      self.exist? ? self.stat().mode : 0600
     end
     def updateFrom(fromNode)
       if fromNode.respond_to?(:to_stream)
